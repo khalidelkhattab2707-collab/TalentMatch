@@ -1,0 +1,855 @@
+# ============================================================
+# TalentMatch — YAML Complet du Projet
+# Laravel 11 / PHP 8.2
+# IA : laravel/ai SDK + Groq API
+# Auteur : Khalid
+# Date   : 2026-06-15
+# ============================================================
+
+project:
+  name: TalentMatch
+  version: "1.0.0"
+  description: "Application Laravel de présélection automatisée de candidats par IA"
+  framework: Laravel 13
+  php: "8.3"
+  database: MySQL 8
+  queue_driver: database
+  ai_sdk: laravel/ai
+  ai_provider: groq
+  ai_model: llama-3.3-70b-versatile
+
+# ------------------------------------------------------------
+# STRUCTURE DES DOSSIERS
+# ------------------------------------------------------------
+
+directory_structure:
+  app/:
+    Console/: "Commandes Artisan custom"
+    Enums/:
+      - RecommandationEnum.php
+      - StatutJobEnum.php
+      - StatutOffreEnum.php
+    Exceptions/:
+      - Handler.php
+      - AnalyseIAException.php
+    Http/:
+      Controllers/:
+        Auth/:
+          - AuthController.php
+        - OffreController.php
+        - CandidatController.php
+        - AnalyseController.php
+        - ConversationController.php
+      Middleware/:
+        - Authenticate.php
+      Requests/:
+        - StoreOffreRequest.php
+        - StoreCandidatRequest.php
+        - StoreMessageRequest.php
+    Jobs/:
+      - AnalyseCvJob.php
+    Models/:
+      - User.php
+      - Offre.php
+      - Candidat.php
+      - Analyse.php
+      - Conversation.php
+      - Message.php
+    AI/:
+      Tools/:
+        - GetCandidateAnalysisTool.php
+        - GetJobRequirementsTool.php
+        - CompareCandidatesTool.php
+      Agents/:
+        - RhAssistantAgent.php
+      Schemas/:
+        - AnalyseCvSchema.php
+  config/:
+    - ai.php
+    - queue.php
+  database/:
+    migrations/:
+      - "2026_06_15_000001_create_users_table.php"
+      - "2026_06_15_000002_create_offres_table.php"
+      - "2026_06_15_000003_create_candidats_table.php"
+      - "2026_06_15_000004_create_analyses_table.php"
+      - "2026_06_15_000005_create_conversations_table.php"
+      - "2026_06_15_000006_create_messages_table.php"
+      - "2026_06_15_000007_create_jobs_table.php"
+    seeders/:
+      - DatabaseSeeder.php
+      - UserSeeder.php
+      - OffreSeeder.php
+  resources/views/:
+    layouts/:
+      - app.blade.php
+    auth/:
+      - login.blade.php
+      - register.blade.php
+    offres/:
+      - index.blade.php
+      - create.blade.php
+      - show.blade.php
+      - edit.blade.php
+    candidats/:
+      - create.blade.php
+      - show.blade.php
+    conversations/:
+      - show.blade.php
+  routes/:
+    - web.php
+    - auth.php
+  specs/:
+    - "feature_auth.md"
+    - "feature_offres_crud.md"
+    - "feature_analyse_ia.md"
+    - "feature_agent_conversationnel.md"
+  AGENTS.md: "Fichier de configuration de l'agent IA"
+  README.md: "Documentation du projet"
+
+# ------------------------------------------------------------
+# BASE DE DONNÉES
+# ------------------------------------------------------------
+
+database_schema:
+
+  tables:
+
+    users:
+      description: "Agents RH authentifiés"
+      columns:
+        id:             { type: bigint unsigned, primary_key: true, auto_increment: true }
+        name:           { type: varchar(255), nullable: false }
+        email:          { type: varchar(255), nullable: false, unique: true }
+        password:       { type: varchar(255), nullable: false }
+        email_verified_at: { type: timestamp, nullable: true }
+        remember_token: { type: varchar(100), nullable: true }
+        created_at:     { type: timestamp, nullable: false }
+        updated_at:     { type: timestamp, nullable: false }
+
+    offres:
+      description: "Offres d'emploi créées par les agents RH"
+      columns:
+        id:                   { type: bigint unsigned, primary_key: true, auto_increment: true }
+        user_id:              { type: bigint unsigned, nullable: false, foreign_key: "users.id", on_delete: cascade }
+        titre:                { type: varchar(255), nullable: false }
+        description:          { type: text, nullable: false }
+        competences_requises: { type: json, nullable: false, cast: array }
+        experience_minimum:   { type: tinyint unsigned, nullable: false, default: 0 }
+        statut:               { type: "enum('active','archivee')", nullable: false, default: active, cast: "App\\Enums\\StatutOffreEnum" }
+        created_at:           { type: timestamp, nullable: false }
+        updated_at:           { type: timestamp, nullable: false }
+      indexes:
+        - { columns: [user_id], name: idx_offres_user_id }
+        - { columns: [statut],  name: idx_offres_statut }
+
+    candidats:
+      description: "CVs soumis par le RH contre une offre"
+      columns:
+        id:          { type: bigint unsigned, primary_key: true, auto_increment: true }
+        offre_id:    { type: bigint unsigned, nullable: false, foreign_key: "offres.id", on_delete: cascade }
+        nom:         { type: varchar(255), nullable: false }
+        cv_texte:    { type: longtext, nullable: false }
+        statut_job:  { type: "enum('en_attente','en_cours','analyse','echec')", nullable: false, default: en_attente, cast: "App\\Enums\\StatutJobEnum" }
+        created_at:  { type: timestamp, nullable: false }
+        updated_at:  { type: timestamp, nullable: false }
+      indexes:
+        - { columns: [offre_id],              name: idx_candidats_offre_id }
+        - { columns: [statut_job],            name: idx_candidats_statut_job }
+        - { columns: [offre_id, statut_job],  name: idx_candidats_offre_statut }
+
+    analyses:
+      description: "Résultat structuré de l'analyse IA — 1 candidat = 1 analyse max"
+      columns:
+        id:                      { type: bigint unsigned, primary_key: true, auto_increment: true }
+        candidat_id:             { type: bigint unsigned, nullable: false, unique: true, foreign_key: "candidats.id", on_delete: cascade }
+        competences_extraites:   { type: json, nullable: false, cast: array }
+        annees_experience:       { type: tinyint unsigned, nullable: false }
+        niveau_etudes:           { type: varchar(100), nullable: false }
+        langues:                 { type: json, nullable: false, cast: array }
+        matching_score:          { type: tinyint unsigned, nullable: false, check: "BETWEEN 0 AND 100" }
+        points_forts:            { type: json, nullable: false, cast: array }
+        lacunes:                 { type: json, nullable: false, cast: array }
+        competences_manquantes:  { type: json, nullable: false, cast: array }
+        recommandation:          { type: "enum('convoquer','attente','rejeter')", nullable: false, cast: "App\\Enums\\RecommandationEnum" }
+        justification:           { type: text, nullable: false }
+        created_at:              { type: timestamp, nullable: false }
+        updated_at:              { type: timestamp, nullable: false }
+      indexes:
+        - { columns: [matching_score], name: idx_analyses_score, note: "Tri décroissant pour classement" }
+
+    conversations:
+      description: "Sessions de chat RH / assistant IA contextualisées sur un candidat"
+      columns:
+        id:           { type: bigint unsigned, primary_key: true, auto_increment: true }
+        user_id:      { type: bigint unsigned, nullable: false, foreign_key: "users.id", on_delete: cascade }
+        candidat_id:  { type: bigint unsigned, nullable: false, foreign_key: "candidats.id", on_delete: cascade }
+        titre:        { type: varchar(255), nullable: true }
+        created_at:   { type: timestamp, nullable: false }
+        updated_at:   { type: timestamp, nullable: false }
+      indexes:
+        - { columns: [user_id, candidat_id], name: idx_conversations_user_candidat }
+
+    messages:
+      description: "Historique des échanges — mémoire de conversation persistée"
+      columns:
+        id:               { type: bigint unsigned, primary_key: true, auto_increment: true }
+        conversation_id:  { type: bigint unsigned, nullable: false, foreign_key: "conversations.id", on_delete: cascade }
+        role:             { type: "enum('user','assistant','tool')", nullable: false }
+        contenu:          { type: text, nullable: true }
+        tool_calls:       { type: json, nullable: true, cast: array }
+        tool_results:     { type: json, nullable: true, cast: array }
+        created_at:       { type: timestamp, nullable: false }
+      indexes:
+        - { columns: [conversation_id, created_at], name: idx_messages_conversation_order }
+
+    jobs:
+      description: "Table native Laravel pour les queues"
+      note: "Générée par php artisan queue:table"
+
+  relations:
+    - { from: users,         to: offres,        type: one_to_many,  foreign_key: offres.user_id }
+    - { from: offres,        to: candidats,     type: one_to_many,  foreign_key: candidats.offre_id }
+    - { from: candidats,     to: analyses,      type: one_to_one,   foreign_key: analyses.candidat_id }
+    - { from: users,         to: conversations, type: one_to_many,  foreign_key: conversations.user_id }
+    - { from: candidats,     to: conversations, type: one_to_many,  foreign_key: conversations.candidat_id }
+    - { from: conversations, to: messages,      type: one_to_many,  foreign_key: messages.conversation_id }
+
+# ------------------------------------------------------------
+# MODÈLES ELOQUENT
+# ------------------------------------------------------------
+
+models:
+
+  User:
+    table: users
+    fillable: [name, email, password]
+    hidden: [password, remember_token]
+    relations:
+      - { type: hasMany, model: Offre, foreign_key: user_id }
+      - { type: hasMany, model: Conversation, foreign_key: user_id }
+
+  Offre:
+    table: offres
+    fillable: [user_id, titre, description, competences_requises, experience_minimum, statut]
+    casts:
+      competences_requises: array
+      statut: "App\\Enums\\StatutOffreEnum"
+    relations:
+      - { type: belongsTo, model: User }
+      - { type: hasMany,   model: Candidat, foreign_key: offre_id }
+    scopes:
+      - name: active
+        condition: "where('statut', StatutOffreEnum::Active)"
+
+  Candidat:
+    table: candidats
+    fillable: [offre_id, nom, cv_texte, statut_job]
+    casts:
+      statut_job: "App\\Enums\\StatutJobEnum"
+    relations:
+      - { type: belongsTo, model: Offre }
+      - { type: hasOne,    model: Analyse, foreign_key: candidat_id }
+      - { type: hasMany,   model: Conversation, foreign_key: candidat_id }
+
+  Analyse:
+    table: analyses
+    fillable:
+      - candidat_id
+      - competences_extraites
+      - annees_experience
+      - niveau_etudes
+      - langues
+      - matching_score
+      - points_forts
+      - lacunes
+      - competences_manquantes
+      - recommandation
+      - justification
+    casts:
+      competences_extraites:  array
+      langues:                array
+      points_forts:           array
+      lacunes:                array
+      competences_manquantes: array
+      recommandation:         "App\\Enums\\RecommandationEnum"
+    relations:
+      - { type: belongsTo, model: Candidat }
+
+  Conversation:
+    table: conversations
+    fillable: [user_id, candidat_id, titre]
+    relations:
+      - { type: belongsTo, model: User }
+      - { type: belongsTo, model: Candidat }
+      - { type: hasMany,   model: Message, foreign_key: conversation_id }
+
+  Message:
+    table: messages
+    fillable: [conversation_id, role, contenu, tool_calls, tool_results]
+    casts:
+      tool_calls:   array
+      tool_results: array
+    relations:
+      - { type: belongsTo, model: Conversation }
+
+# ------------------------------------------------------------
+# ENUMS PHP (Backed Enums Laravel 11)
+# ------------------------------------------------------------
+
+php_enums:
+
+  RecommandationEnum:
+    namespace: "App\\Enums"
+    type: string
+    cases:
+      - { value: convoquer, label: "À convoquer" }
+      - { value: attente,   label: "En attente" }
+      - { value: rejeter,   label: "À rejeter" }
+
+  StatutJobEnum:
+    namespace: "App\\Enums"
+    type: string
+    cases:
+      - { value: en_attente, label: "En attente d'analyse" }
+      - { value: en_cours,   label: "Analyse en cours" }
+      - { value: analyse,    label: "Analysé" }
+      - { value: echec,      label: "Échec de l'analyse" }
+
+  StatutOffreEnum:
+    namespace: "App\\Enums"
+    type: string
+    cases:
+      - { value: active,    label: "Active" }
+      - { value: archivee,  label: "Archivée" }
+
+# ------------------------------------------------------------
+# ROUTES
+# ------------------------------------------------------------
+
+routes:
+
+  auth:
+    - { method: GET,  uri: "/login",    action: "AuthController@showLogin",   name: login,    middleware: guest }
+    - { method: POST, uri: "/login",    action: "AuthController@login",       name: "",        middleware: guest }
+    - { method: GET,  uri: "/register", action: "AuthController@showRegister",name: register, middleware: guest }
+    - { method: POST, uri: "/register", action: "AuthController@register",    name: "",        middleware: guest }
+    - { method: POST, uri: "/logout",   action: "AuthController@logout",      name: logout,   middleware: auth }
+
+  offres:
+    middleware: auth
+    prefix: /offres
+    routes:
+      - { method: GET,    uri: "/",         action: "OffreController@index",   name: offres.index }
+      - { method: GET,    uri: "/create",   action: "OffreController@create",  name: offres.create }
+      - { method: POST,   uri: "/",         action: "OffreController@store",   name: offres.store,   form_request: StoreOffreRequest }
+      - { method: GET,    uri: "/{offre}",  action: "OffreController@show",    name: offres.show }
+      - { method: GET,    uri: "/{offre}/edit", action: "OffreController@edit", name: offres.edit }
+      - { method: PUT,    uri: "/{offre}",  action: "OffreController@update",  name: offres.update,  form_request: StoreOffreRequest }
+      - { method: DELETE, uri: "/{offre}",  action: "OffreController@destroy", name: offres.destroy }
+
+  candidats:
+    middleware: auth
+    prefix: /offres/{offre}/candidats
+    routes:
+      - { method: GET,  uri: "/create", action: "CandidatController@create", name: candidats.create }
+      - { method: POST, uri: "/",       action: "CandidatController@store",  name: candidats.store, form_request: StoreCandidatRequest }
+      - { method: GET,  uri: "/{candidat}", action: "CandidatController@show", name: candidats.show }
+
+  conversations:
+    middleware: auth
+    prefix: /conversations
+    routes:
+      - { method: POST, uri: "/",                        action: "ConversationController@store",       name: conversations.store }
+      - { method: GET,  uri: "/{conversation}",          action: "ConversationController@show",        name: conversations.show }
+      - { method: POST, uri: "/{conversation}/messages", action: "ConversationController@sendMessage", name: conversations.message, form_request: StoreMessageRequest }
+
+# ------------------------------------------------------------
+# CONTROLLERS
+# ------------------------------------------------------------
+
+controllers:
+
+  AuthController:
+    namespace: "App\\Http\\Controllers\\Auth"
+    methods:
+      showLogin:    { returns: view('auth.login') }
+      login:        { request: Request, validates: [email, password], returns: "redirect offres.index" }
+      showRegister: { returns: view('auth.register') }
+      register:     { request: Request, validates: [name, email, password], returns: "redirect offres.index" }
+      logout:       { returns: "redirect login" }
+
+  OffreController:
+    namespace: "App\\Http\\Controllers"
+    middleware: auth
+    methods:
+      index:
+        query: "Auth::user()->offres()->withCount('candidats')->latest()->get()"
+        returns: "view('offres.index', compact('offres'))"
+      create:
+        returns: "view('offres.create')"
+      store:
+        request: StoreOffreRequest
+        action: "Offre::create([...validated, user_id => auth()->id()])"
+        returns: "redirect offres.show"
+      show:
+        query: "offre->load('candidats.analyse')"
+        returns: "view('offres.show', compact('offre'))"
+        note: "Eager load pour éviter N+1"
+      edit:
+        policy: "user must own offre"
+        returns: "view('offres.edit', compact('offre'))"
+      update:
+        request: StoreOffreRequest
+        returns: "redirect offres.show"
+      destroy:
+        policy: "user must own offre"
+        returns: "redirect offres.index"
+
+  CandidatController:
+    namespace: "App\\Http\\Controllers"
+    middleware: auth
+    methods:
+      create:
+        returns: "view('candidats.create', compact('offre'))"
+      store:
+        request: StoreCandidatRequest
+        action:
+          - "Candidat::create([...validated, offre_id => offre->id])"
+          - "AnalyseCvJob::dispatch(candidat)"
+        returns: "redirect candidats.show with success message"
+        note: "Le Job est dispatché — la page ne se fige pas"
+      show:
+        query: "candidat->load('analyse', 'offre')"
+        returns: "view('candidats.show', compact('candidat'))"
+
+  ConversationController:
+    namespace: "App\\Http\\Controllers"
+    middleware: auth
+    methods:
+      store:
+        action: "Conversation::firstOrCreate([user_id, candidat_id])"
+        returns: "redirect conversations.show"
+      show:
+        query: "conversation->load('messages', 'candidat.analyse', 'candidat.offre')"
+        returns: "view('conversations.show', compact('conversation'))"
+      sendMessage:
+        request: StoreMessageRequest
+        action:
+          - "Message::create([role: user, contenu: input])"
+          - "RhAssistantAgent::run(conversation)"
+          - "Message::create([role: assistant, contenu: response])"
+        returns: "redirect conversations.show"
+
+# ------------------------------------------------------------
+# FORM REQUESTS (Validation)
+# ------------------------------------------------------------
+
+form_requests:
+
+  StoreOffreRequest:
+    namespace: "App\\Http\\Requests"
+    authorize: "return true (auth middleware gère l'accès)"
+    rules:
+      titre:                { rule: "required|string|max:255" }
+      description:          { rule: "required|string|min:20" }
+      competences_requises: { rule: "required|array|min:1" }
+      "competences_requises.*": { rule: "string|max:100" }
+      experience_minimum:   { rule: "required|integer|min:0|max:30" }
+
+  StoreCandidatRequest:
+    namespace: "App\\Http\\Requests"
+    authorize: "return true"
+    rules:
+      nom:       { rule: "required|string|max:255" }
+      cv_texte:  { rule: "required|string|min:50", note: "CV vide = cas limite géré" }
+
+  StoreMessageRequest:
+    namespace: "App\\Http\\Requests"
+    authorize: "return true"
+    rules:
+      contenu: { rule: "required|string|max:2000" }
+
+# ------------------------------------------------------------
+# JOBS & QUEUES
+# ------------------------------------------------------------
+
+jobs:
+
+  AnalyseCvJob:
+    namespace: "App\\Jobs"
+    implements: ShouldQueue
+    queue: default
+    tries: 3
+    timeout: 120
+    constructor:
+      - param: candidat
+        type: "App\\Models\\Candidat"
+    handle_steps:
+      - step: 1
+        action: "candidat->update(['statut_job' => StatutJobEnum::EnCours])"
+      - step: 2
+        action: >
+          Appel SDK laravel/ai avec structured output
+          — schéma défini dans AnalyseCvSchema
+          — prompt : CV + critères offre
+      - step: 3
+        action: "Analyse::create([candidat_id => candidat->id, ...structured_output])"
+      - step: 4
+        action: "candidat->update(['statut_job' => StatutJobEnum::Analyse])"
+      - step: 5
+        on_failure: "candidat->update(['statut_job' => StatutJobEnum::Echec])"
+    failed_method: "Log::error + candidat->statut_job = echec"
+
+# ------------------------------------------------------------
+# FEATURE IA — COUCHE 1 : STRUCTURED OUTPUT
+# ------------------------------------------------------------
+
+ai_structured_output:
+
+  schema_class: "App\\AI\\Schemas\\AnalyseCvSchema"
+  sdk: "laravel/ai"
+
+  json_contract:
+    competences_extraites:  { type: "array<string>",  description: "Compétences détectées dans le CV" }
+    annees_experience:      { type: integer,           description: "Années d'expérience estimées" }
+    niveau_etudes:          { type: string,            description: "Ex: Bac+2, Licence, Master" }
+    langues:                { type: "array<string>",   description: "Langues détectées" }
+    matching_score:         { type: "integer(0-100)",  description: "Score global de correspondance" }
+    points_forts:           { type: "array<string>",   description: "Atouts du candidat" }
+    lacunes:                { type: "array<string>",   description: "Faiblesses par rapport à l'offre" }
+    competences_manquantes: { type: "array<string>",   description: "Compétences requises absentes du CV" }
+    recommandation:         { type: "enum(convoquer|attente|rejeter)", description: "Décision IA finale" }
+    justification:          { type: string,            description: "Explication du score et de la recommandation" }
+
+  prompt_template: >
+    Tu es un expert RH. Analyse ce CV en le comparant à l'offre d'emploi fournie.
+    Offre : {offre.titre} — Compétences requises : {offre.competences_requises}
+    Expérience minimum : {offre.experience_minimum} ans.
+    CV du candidat : {candidat.cv_texte}
+    Retourne UNIQUEMENT un JSON conforme au schéma. Pas de texte en dehors du JSON.
+
+  edge_cases:
+    - case: "CV vide ou trop court (< 50 chars)"
+      handling: "Validé en amont par StoreCandidatRequest — min:50"
+    - case: "Offre sans compétences requises"
+      handling: "Validé par StoreOffreRequest — competences_requises min:1"
+    - case: "Réponse IA hors schéma"
+      handling: "SDK lève une exception — capturée dans AnalyseCvJob::failed()"
+    - case: "Timeout Groq API"
+      handling: "Job retried 3 fois — puis statut_job = echec"
+
+# ------------------------------------------------------------
+# FEATURE IA — COUCHE 2 : AGENT AVEC TOOLS ET MÉMOIRE
+# ------------------------------------------------------------
+
+ai_agent:
+
+  class: "App\\AI\\Agents\\RhAssistantAgent"
+  sdk: "laravel/ai"
+  model: "llama-3.3-70b-versatile"
+
+  system_prompt: >
+    Tu es un assistant RH expert. Tu aides les recruteurs à analyser les candidatures.
+    Tu dois TOUJOURS utiliser les tools disponibles pour récupérer les données réelles
+    avant de répondre. Ne jamais inventer de scores, de compétences ou de recommandations.
+    Réponds en français, de façon claire et professionnelle.
+
+  memory:
+    type: "conversation_history"
+    storage: messages table
+    strategy: >
+      À chaque appel, charger tous les messages de la conversation
+      et les passer au SDK comme historique. Le SDK maintient le contexte.
+    reconstruction: >
+      conversation->messages()->orderBy('created_at')->get()
+      → transformer en format [{role, content}] pour l'API
+
+  tools:
+
+    GetCandidateAnalysisTool:
+      class: "App\\AI\\Tools\\GetCandidateAnalysisTool"
+      description: "Récupère l'analyse complète d'un candidat depuis la base de données"
+      when_to_call: >
+        Quand le RH pose une question sur le score, les compétences,
+        les lacunes ou la recommandation d'un candidat spécifique
+      parameters:
+        candidat_id: { type: integer, required: true, description: "ID du candidat" }
+      returns:
+        model: Analyse
+        includes: [matching_score, recommandation, points_forts, lacunes, competences_manquantes, justification]
+      implementation: "Analyse::where('candidat_id', $candidatId)->with('candidat')->firstOrFail()"
+
+    GetJobRequirementsTool:
+      class: "App\\AI\\Tools\\GetJobRequirementsTool"
+      description: "Récupère les critères et compétences requises d'une offre d'emploi"
+      when_to_call: >
+        Quand l'assistant a besoin de connaître les exigences de l'offre
+        pour contextualiser une réponse
+      parameters:
+        offre_id: { type: integer, required: true, description: "ID de l'offre" }
+      returns:
+        model: Offre
+        includes: [titre, description, competences_requises, experience_minimum]
+      implementation: "Offre::findOrFail($offreId)"
+
+    CompareCandidatesTool:
+      class: "App\\AI\\Tools\\CompareCandidatesTool"
+      description: "Compare deux candidats analysés sur la même offre"
+      when_to_call: >
+        Quand le RH demande de comparer deux profils ou de savoir
+        lequel est le plus adapté
+      parameters:
+        candidat_id_1: { type: integer, required: true }
+        candidat_id_2: { type: integer, required: true }
+      returns:
+        structure:
+          candidat_1: { nom, matching_score, recommandation, points_forts }
+          candidat_2: { nom, matching_score, recommandation, points_forts }
+          comparaison: { meilleur_profil, ecart_score, justification }
+      implementation: >
+        Analyse::whereIn('candidat_id', [$id1, $id2])
+        ->with('candidat')->get()
+        → structure de comparaison
+
+  what_agent_must_not_do:
+    - "Inventer un score sans appeler GetCandidateAnalysisTool"
+    - "Répondre sur les compétences d'un candidat sans tool call"
+    - "Donner une recommandation sans données réelles"
+    - "Comparer deux candidats sans appeler CompareCandidatesTool"
+    - "Répondre en dehors du contexte RH / recrutement"
+
+# ------------------------------------------------------------
+# FEATURES (User Stories → Specs)
+# ------------------------------------------------------------
+
+features:
+
+  feature_auth:
+    branch: "feature/auth"
+    user_stories: [US1]
+    spec_file: "specs/feature_auth.md"
+    components:
+      - AuthController (login, register, logout)
+      - views: auth/login.blade.php, auth/register.blade.php
+      - middleware: auth (protège toutes les routes sauf login/register)
+    acceptance_criteria:
+      - "L'utilisateur peut s'inscrire avec name/email/password"
+      - "L'utilisateur peut se connecter et être redirigé vers offres.index"
+      - "L'utilisateur peut se déconnecter"
+      - "Les routes protégées redirigent vers /login si non authentifié"
+
+  feature_offres_crud:
+    branch: "feature/offres-crud"
+    user_stories: [US2, US3, US4]
+    spec_file: "specs/feature_offres_crud.md"
+    components:
+      - OffreController (index, create, store, show, edit, update, destroy)
+      - StoreOffreRequest
+      - Offre model avec casts et scopes
+      - views: offres/ (index, create, show, edit)
+    acceptance_criteria:
+      - "L'agent RH peut créer une offre avec titre, description, compétences, expérience min"
+      - "La liste affiche le nombre de candidats par offre (withCount — pas de N+1)"
+      - "Le détail de l'offre liste tous les candidats avec leur matching_score"
+      - "L'agent ne peut modifier/supprimer que ses propres offres"
+    performance:
+      - "Zéro N+1 vérifié avec Debugbar"
+      - "eager_load: offre->load('candidats.analyse') dans show()"
+
+  feature_analyse_ia:
+    branch: "feature/analyse-ia"
+    user_stories: [US5, US6, US7, US8]
+    spec_file: "specs/feature_analyse_ia.md"
+    components:
+      - CandidatController (create, store, show)
+      - StoreCandidatRequest
+      - AnalyseCvJob (dispatché en queue)
+      - AnalyseCvSchema (contrat JSON structured output)
+      - Candidat + Analyse models
+      - views: candidats/ (create, show)
+    flow:
+      - "1. RH soumet le formulaire (nom + cv_texte)"
+      - "2. StoreCandidatRequest valide les données"
+      - "3. Candidat créé en base avec statut_job = en_attente"
+      - "4. AnalyseCvJob::dispatch(candidat) — asynchrone"
+      - "5. RH redirigé vers candidat.show avec message 'Analyse en cours'"
+      - "6. Job tourne en background — appel IA avec structured output"
+      - "7. Analyse créée en base — statut_job = analyse"
+      - "8. Page rafraîchie manuellement ou via polling affiche le résultat"
+    acceptance_criteria:
+      - "La page ne se fige pas lors de la soumission du CV"
+      - "Le contrat JSON est respecté (tous les champs présents et typés)"
+      - "La recommandation est visible : À convoquer / En attente / À rejeter"
+      - "Les cas limites sont gérés (CV vide, API timeout)"
+
+  feature_agent_conversationnel:
+    branch: "feature/agent-conversationnel"
+    user_stories: [US9, US10, US11]
+    spec_file: "specs/feature_agent_conversationnel.md"
+    components:
+      - ConversationController (store, show, sendMessage)
+      - RhAssistantAgent
+      - GetCandidateAnalysisTool
+      - GetJobRequirementsTool
+      - CompareCandidatesTool
+      - Conversation + Message models
+      - views: conversations/show.blade.php
+    flow:
+      - "1. RH ouvre la page d'un candidat → bouton 'Discuter avec l'assistant'"
+      - "2. ConversationController::store crée ou récupère la conversation"
+      - "3. RH saisit une question → POST /conversations/{id}/messages"
+      - "4. Message user sauvegardé en base"
+      - "5. RhAssistantAgent::run(conversation) — charge l'historique complet"
+      - "6. Agent appelle les tools si nécessaire"
+      - "7. Tool results sauvegardés en base (messages role=tool)"
+      - "8. Réponse finale sauvegardée (role=assistant)"
+      - "9. Vue rechargée — historique affiché"
+    acceptance_criteria:
+      - "L'assistant répond avec des données réelles (pas d'hallucination)"
+      - "L'assistant se souvient du contexte entre deux questions"
+      - "Les tools sont appelés avant de répondre (visible dans les logs)"
+      - "La comparaison de deux candidats fonctionne"
+
+# ------------------------------------------------------------
+# WORKFLOW AI-ASSISTED
+# ------------------------------------------------------------
+
+ai_workflow:
+
+  tools_used:
+    - name: "Laravel Boost"
+      type: "MCP server local (dev dependency)"
+      role: >
+        Donne au coding agent la connaissance du schéma DB,
+        des routes, et des versions des packages installés.
+        Améliore la qualité du code généré (moins de hallucinations
+        sur les APIs Laravel spécifiques).
+      install: "composer require --dev laravel/boost"
+
+    - name: "OpenSpec"
+      type: "Spec file par feature"
+      role: >
+        Rédige la spec de chaque feature AVANT de coder.
+        L'agent code contre la spec, pas contre un prompt vague.
+        Définit ce que l'agent DOIT faire et NE DOIT PAS faire.
+      location: "specs/*.md"
+
+  agents_md:
+    location: "AGENTS.md (racine du projet)"
+    content_summary:
+      - "Contexte du projet et stack technique"
+      - "Conventions de nommage (snake_case tables, PascalCase classes)"
+      - "Règles d'architecture (Form Requests obligatoires, pas de logique dans les vues)"
+      - "Ce que l'agent NE DOIT PAS faire (pas de logique IA dans les controllers)"
+      - "Instructions pour les tools et la mémoire de conversation"
+      - "Workflow de commit (mention AI obligatoire)"
+
+  git_workflow:
+    branches:
+      - main
+      - "feature/auth"
+      - "feature/offres-crud"
+      - "feature/analyse-ia"
+      - "feature/agent-conversationnel"
+    commit_convention:
+      format: "<type>(<scope>): <description> [AI: <usage>]"
+      examples:
+        - "feat(offres): add StoreOffreRequest with validation rules [AI: generated, reviewed manually]"
+        - "feat(analyse): implement AnalyseCvJob with structured output [AI: assisted, modified prompt]"
+        - "feat(agent): add GetCandidateAnalysisTool [AI: generated, tested manually]"
+        - "fix(queue): handle Groq API timeout in AnalyseCvJob [AI: no, manual fix]"
+    minimum_commits: 20
+    daily_commits: true
+
+  jira:
+    board_name: "TalentMatch"
+    shared_with: "abderahmane.merradou@gmail.com"
+    columns: [To Do, In Progress, En validation, Done]
+    tickets:
+      - { id: TM-1,  us: US1,  title: "Inscription / Connexion / Déconnexion" }
+      - { id: TM-2,  us: US2,  title: "Créer une offre d'emploi" }
+      - { id: TM-3,  us: US3,  title: "Liste des offres avec compteur candidats" }
+      - { id: TM-4,  us: US4,  title: "Détail d'une offre avec candidats" }
+      - { id: TM-5,  us: US5,  title: "Soumettre un CV" }
+      - { id: TM-6,  us: US6,  title: "Analyse IA structurée (structured output)" }
+      - { id: TM-7,  us: US7,  title: "Voir l'analyse d'un candidat" }
+      - { id: TM-8,  us: US8,  title: "Recommandation typée visible" }
+      - { id: TM-9,  us: US9,  title: "Poser une question sur un candidat" }
+      - { id: TM-10, us: US10, title: "Mémoire de conversation" }
+      - { id: TM-11, us: US11, title: "L'assistant appelle des tools" }
+      - { id: TM-12, us: BONUS, title: "Comparer deux candidats" }
+      - { id: TM-13, us: BONUS, title: "Classement automatique par score" }
+
+# ------------------------------------------------------------
+# CALENDRIER
+# ------------------------------------------------------------
+
+planning:
+  lancement: "2026-06-15 10:00"
+  deadline:  "2026-06-19 23:00"
+  ferie:     "2026-06-17 (Fatih Muharram)"
+  teletravail: "2026-06-19"
+
+  daily_plan:
+    "Lundi 15/06":
+      morning:
+        - "MCD + MLD + YAML → soumission avant 13h"
+        - "Validation du schéma par le formateur"
+      afternoon:
+        - "Setup projet Laravel (composer, .env, DB)"
+        - "Migrations + Models + Enums"
+        - "feature/auth — US1"
+    "Mardi 16/06":
+      - "feature/offres-crud — US2, US3, US4"
+      - "feature/analyse-ia début — US5, US6 (Job + Structured Output)"
+    "Mercredi 17/06":
+      - "FÉRIÉ — optionnel : avancer feature/analyse-ia"
+    "Jeudi 18/06":
+      - "feature/analyse-ia fin — US7, US8"
+      - "feature/agent-conversationnel — US9, US10, US11"
+    "Vendredi 19/06":
+      - "Tests, edge cases, Debugbar N+1"
+      - "README.md, specs/ propre, push final"
+      - "Deadline 23:00"
+
+# ------------------------------------------------------------
+# CRITÈRES DE PERFORMANCE
+# ------------------------------------------------------------
+
+performance_criteria:
+
+  architecture_laravel_agent:
+    weight: "35%"
+    checks:
+      - "Structured output garanti — contrat JSON respecté, données typées"
+      - "Tools définis et appelés par l'agent (pas de réponses inventées)"
+      - "Mémoire de conversation fonctionnelle"
+      - "Queue + Job pour l'analyse en background"
+      - "Form Requests sur création offre et soumission CV"
+      - "Eloquent Casts corrects (enum recommandation, array champs JSON)"
+
+  fonctionnalites:
+    weight: "25%"
+    checks:
+      - "CRUD Offres complet"
+      - "Analyse IA fonctionnelle (score + points forts + lacunes + recommandation)"
+      - "Assistant conversationnel avec données réelles"
+      - "Recommandation typée visible par offre et par candidat"
+
+  workflow_ai_assisted:
+    weight: "25%"
+    checks:
+      - "Laravel Boost installé et utilisé"
+      - "Specs présentes dans specs/"
+      - "AGENTS.md commité"
+      - "Commits avec mention AI"
+      - "Capacité à expliquer tools vs hallucination, queue vs synchrone, mémoire vs stateless"
+
+  qualite_posture:
+    weight: "15%"
+    checks:
+      - "Code expliqué et défendu"
+      - "Cas limites gérés (CV vide, offre sans compétences, réponse IA hors schéma)"
+      - "Zéro N+1 (Debugbar)"
+      - "Dossier specs/ propre et versionné"
