@@ -50,7 +50,12 @@
 
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 dark:text-gray-100">
-                    <h3 class="text-lg font-semibold mb-4">{{ __('Candidats') }} ({{ $offre->candidats->count() }})</h3>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">{{ __('Candidats') }} ({{ $offre->candidats->count() }})</h3>
+                        <a href="{{ route('offres.candidats.create', $offre) }}" class="inline-flex items-center px-4 py-2 bg-gray-800 dark:bg-gray-200 border border-transparent rounded-md font-semibold text-xs text-white dark:text-gray-800 uppercase tracking-widest hover:bg-gray-700 dark:hover:bg-white focus:bg-gray-700 dark:focus:bg-white active:bg-gray-900 dark:active:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150">
+                            {{ __('Ajouter un candidat') }}
+                        </a>
+                    </div>
 
                     @if ($offre->candidats->isEmpty())
                         <p class="text-gray-500 dark:text-gray-400">{{ __('Aucun candidat pour cette offre.') }}</p>
@@ -67,7 +72,11 @@
                                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                     @foreach ($offre->candidats as $candidat)
                                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">{{ $candidat->nom }}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                <a href="{{ route('offres.candidats.show', [$offre, $candidat]) }}" class="text-indigo-600 dark:text-indigo-400 hover:underline">
+                                                    {{ $candidat->nom }}
+                                                </a>
+                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                                                 {{ $candidat->analyse?->matching_score ?? '—' }}
                                             </td>
