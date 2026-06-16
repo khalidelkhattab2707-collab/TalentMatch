@@ -35,7 +35,11 @@ class OffreController extends Controller
 
         $offre->load('candidats.analyse');
 
-        return view('offres.show', compact('offre'));
+        $candidats = $offre->candidats->sortByDesc(function ($c) {
+            return $c->analyse?->matching_score ?? -1;
+        })->values();
+
+        return view('offres.show', compact('offre', 'candidats'));
     }
 
     public function edit(Offre $offre): View
