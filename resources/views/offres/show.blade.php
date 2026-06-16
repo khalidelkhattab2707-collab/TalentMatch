@@ -52,15 +52,34 @@
                 <div class="p-6 text-gray-900 dark:text-gray-100">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg font-semibold">{{ __('Candidats') }} ({{ $offre->candidats->count() }})</h3>
-                        <a href="{{ route('offres.candidats.create', $offre) }}" class="inline-flex items-center px-4 py-2 bg-gray-800 dark:bg-gray-200 border border-transparent rounded-md font-semibold text-xs text-white dark:text-gray-800 uppercase tracking-widest hover:bg-gray-700 dark:hover:bg-white focus:bg-gray-700 dark:focus:bg-white active:bg-gray-900 dark:active:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150">
-                            {{ __('Ajouter un candidat') }}
-                        </a>
+                        <div class="flex gap-2">
+                            <a href="{{ route('offres.candidats.create', $offre) }}" class="inline-flex items-center px-4 py-2 bg-gray-800 dark:bg-gray-200 border border-transparent rounded-md font-semibold text-xs text-white dark:text-gray-800 uppercase tracking-widest hover:bg-gray-700 dark:hover:bg-white focus:bg-gray-700 dark:focus:bg-white active:bg-gray-900 dark:active:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150">
+                                {{ __('Ajouter un candidat') }}
+                            </a>
+                        </div>
                     </div>
 
                     @if ($candidats->isEmpty())
                         <p class="text-gray-500 dark:text-gray-400">{{ __('Aucun candidat pour cette offre.') }}</p>
                     @else
-                        @include('candidates._ranking-table', ['candidats' => $candidats, 'showOffre' => false])
+                        <form method="GET" action="{{ route('offres.comparer', $offre) }}" x-data="{ selected: [] }">
+                            @include('candidates._ranking-table', [
+                                'candidats' => $candidats,
+                                'showOffre' => false,
+                                'showCheckboxes' => true,
+                            ])
+
+                            <div class="mt-4 flex items-center gap-4">
+                                <template x-for="id in selected" :key="id">
+                                    <input type="hidden" name="candidats[]" :value="id">
+                                </template>
+                                <x-primary-button
+                                    x-bind:disabled="selected.length !== 2"
+                                    x-text="selected.length === 2 ? '{{ __('Comparer') }} (2)' : (selected.length === 0 ? '{{ __('Sélectionner 2 candidats') }}' : '{{ __('Sélectionner 2 candidats') }} (' + selected.length + '/2)')"
+                                >
+                                </x-primary-button>
+                            </div>
+                        </form>
                     @endif
                 </div>
             </div>

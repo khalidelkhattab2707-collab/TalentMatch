@@ -1,6 +1,7 @@
 @props([
     'candidats',
     'showOffre' => false,
+    'showCheckboxes' => false,
 ])
 
 @php
@@ -128,6 +129,11 @@
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead class="bg-gray-50 dark:bg-gray-700">
                 <tr>
+                    @if ($showCheckboxes)
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-10">
+                            {{ __('Sél.') }}
+                        </th>
+                    @endif
                     <th @click="sort('recOrder')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-100">
                         {{ __('Rang') }} <span x-text="sortIcon('recOrder')" class="ml-1"></span>
                     </th>
@@ -153,6 +159,11 @@
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 <template x-for="(row, index) in sortedRows" :key="row.id">
                     <tr>
+                        @if ($showCheckboxes)
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                <input type="checkbox" :value="row.id" x-model="$parent.selected" class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 shadow-sm focus:ring-indigo-500">
+                            </td>
+                        @endif
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" x-text="index + 1"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <a :href="row.url" class="text-indigo-600 dark:text-indigo-400 hover:underline" x-text="row.name"></a>
@@ -175,7 +186,7 @@
                     </tr>
                 </template>
                 <tr x-show="sortedRows.length === 0">
-                    <td :colspan="{{ $showOffre ? 6 : 5 }}" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td :colspan="{{ ($showCheckboxes ? 1 : 0) + ($showOffre ? 6 : 5) }}" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                         {{ __('Aucun candidat trouvé.') }}
                     </td>
                 </tr>
