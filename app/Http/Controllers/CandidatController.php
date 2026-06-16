@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreCandidatRequest;
+use App\Jobs\AnalyseCvJob;
 use App\Models\Candidat;
 use App\Models\Offre;
 use Illuminate\Http\RedirectResponse;
@@ -24,7 +25,10 @@ class CandidatController extends Controller
 
         $candidat = $offre->candidats()->create($request->validated());
 
-        return to_route('offres.candidats.show', [$offre, $candidat]);
+        dispatch(new AnalyseCvJob($candidat));
+
+        return to_route('offres.candidats.show', [$offre, $candidat])
+            ->with('success', __("Candidat ajouté. L'analyse est en cours."));
     }
 
     public function show(Offre $offre, Candidat $candidat): View

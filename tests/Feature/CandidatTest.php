@@ -3,6 +3,7 @@
 use App\Models\Candidat;
 use App\Models\Offre;
 use App\Models\User;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
@@ -27,11 +28,13 @@ it('prevents showing the create form for another user offre', function () {
 });
 
 it('creates a new candidat', function () {
+    Queue::fake();
+
     $offre = Offre::factory()->create(['user_id' => $this->user->id]);
 
     $response = $this->post(route('offres.candidats.store', $offre), [
         'nom' => 'Jean Dupont',
-        'cv_texte' => 'Développeur PHP avec 5 ans d\'expérience.',
+        'cv_texte' => 'Développeur PHP avec 5 ans d\'expérience en développement web avec Laravel.',
     ]);
 
     $this->assertDatabaseHas('candidats', [
@@ -57,7 +60,7 @@ it('prevents creating a candidat for another user offre', function () {
 
     $response = $this->post(route('offres.candidats.store', $offre), [
         'nom' => 'Jean Dupont',
-        'cv_texte' => 'Développeur PHP.',
+        'cv_texte' => 'Développeur PHP avec 5 ans d\'expérience en développement web avec Laravel.',
     ]);
 
     $response->assertForbidden();
