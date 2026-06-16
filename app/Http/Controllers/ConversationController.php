@@ -5,12 +5,12 @@ namespace App\Http\Controllers;
 use App\Ai\Agents\RhAssistantAgent;
 use App\Http\Requests\StoreMessageRequest;
 use App\Models\Candidat;
+use App\Models\Conversation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
-use Laravel\Ai\Models\Conversation;
 
 class ConversationController extends Controller
 {
