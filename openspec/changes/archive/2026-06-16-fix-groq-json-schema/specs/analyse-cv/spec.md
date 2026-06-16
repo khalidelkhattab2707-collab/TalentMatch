@@ -1,30 +1,4 @@
-## Purpose
-
-Automatically analyze candidate CVs via an asynchronous queued job (`AnalyseCvJob`) using the `laravel/ai` SDK with Groq LLM and structured output. The analysis extracts skills, computes a matching score, and generates a recommendation — all without blocking the UI.
-
-## Requirements
-
-### Requirement: Analyse automatique du CV
-
-Le système SHALL analyser automatiquement le CV d'un candidat via une file d'attente (queue) dès que le candidat est créé. L'analyse SHALL être asynchrone — la page ne se fige pas.
-
-#### Scenario: Analyse déclenchée à la création
-- **WHEN** un candidat est créé via `CandidatController@store`
-- **THEN** le système dispatch `AnalyseCvJob` en queue
-- **THEN** le statut du candidat passe à `en_attente`
-- **THEN** l'utilisateur est redirigé vers la page de détail du candidat sans attendre
-
-#### Scenario: Analyse réussie
-- **WHEN** le job `AnalyseCvJob` s'exécute avec succès
-- **THEN** le statut du candidat passe à `en_cours` pendant l'analyse
-- **THEN** le système appelle l'IA avec le prompt et le schéma structuré
-- **THEN** une entrée `Analyse` est créée avec les résultats (compétences, score, recommandation)
-- **THEN** le statut du candidat passe à `analyse`
-
-#### Scenario: Analyse en échec
-- **WHEN** l'appel API IA échoue après 3 tentatives
-- **THEN** le statut du candidat passe à `echec`
-- **THEN** l'erreur est journalisée
+## MODIFIED Requirements
 
 ### Requirement: Contrat JSON structuré
 
@@ -43,16 +17,6 @@ Le système SHALL garantir que la réponse IA respecte un contrat JSON strict. C
 - **THEN** le job est marqué comme échoué
 - **THEN** `statut_job` passe à `echec`
 - **THEN** l'erreur est journalisée
-
-### Requirement: Statut du candidat pendant l'analyse
-
-Le système SHALL mettre à jour le statut du candidat tout au long du cycle d'analyse.
-
-#### Scenario: Cycle de statut complet
-- **WHEN** le candidat est créé → statut `en_attente`
-- **WHEN** le job commence → statut `en_cours`
-- **WHEN** l'analyse réussit → statut `analyse`
-- **WHEN** l'analyse échoue → statut `echec`
 
 ### Requirement: Affichage des résultats d'analyse
 

@@ -2,6 +2,7 @@
 
 use App\AI\Schemas\AnalyseCvSchema;
 use App\Enums\StatutJobEnum;
+use App\Exceptions\AnalyseIAException;
 use App\Jobs\AnalyseCvJob;
 use App\Models\Analyse;
 use App\Models\Candidat;
@@ -28,7 +29,20 @@ it('dispatches AnalyseCvJob when candidat is created', function () {
 });
 
 it('creates analyse record when job executes successfully', function () {
-    AnalyseCvSchema::fake();
+    AnalyseCvSchema::fake([
+        json_encode([
+            'competences_extraites' => ['PHP', 'Laravel', 'MySQL'],
+            'annees_experience' => 5,
+            'niveau_etudes' => 'Master',
+            'langues' => ['Français', 'Anglais'],
+            'matching_score' => 85,
+            'points_forts' => ['Expert Laravel'],
+            'lacunes' => ['Pas de React'],
+            'competences_manquantes' => ['React'],
+            'recommandation' => 'convoquer',
+            'justification' => 'Excellent profil correspondant aux critères.',
+        ]),
+    ]);
 
     $offre = Offre::factory()->create([
         'user_id' => $this->user->id,
@@ -55,13 +69,26 @@ it('marks candidat as echec when job fails', function () {
     ]);
 
     $job = new AnalyseCvJob($candidat);
-    $job->failed();
+    $job->failed(new Exception('Test error'));
 
     expect($candidat->fresh()->statut_job)->toBe(StatutJobEnum::Echec);
 });
 
 it('updates candidat status through the analysis lifecycle', function () {
-    AnalyseCvSchema::fake();
+    AnalyseCvSchema::fake([
+        json_encode([
+            'competences_extraites' => ['PHP', 'Laravel', 'MySQL'],
+            'annees_experience' => 5,
+            'niveau_etudes' => 'Master',
+            'langues' => ['Français', 'Anglais'],
+            'matching_score' => 85,
+            'points_forts' => ['Expert Laravel'],
+            'lacunes' => ['Pas de React'],
+            'competences_manquantes' => ['React'],
+            'recommandation' => 'convoquer',
+            'justification' => 'Excellent profil correspondant aux critères.',
+        ]),
+    ]);
 
     $offre = Offre::factory()->create([
         'user_id' => $this->user->id,
@@ -80,4 +107,81 @@ it('updates candidat status through the analysis lifecycle', function () {
     (new AnalyseCvJob($candidat))->handle();
 
     expect($candidat->fresh()->statut_job)->toBe(StatutJobEnum::Analyse);
+});
+
+it('validates a correct response schema', function () {
+    $data = [
+        'competences_extraites' => ['PHP'],
+        'annees_experience' => 3,
+        'niveau_etudes' => 'Licence',
+        'langues' => ['Français'],
+        'matching_score' => 75,
+        'points_forts' => ['Bon développeur'],
+        'lacunes' => ['Manque d\'expérience'],
+        'competences_manquantes' => ['Docker'],
+        'recommandation' => 'attente',
+        'justification' => 'Profil correct.',
+    ];
+
+    $result = AnalyseCvSchema::validateResponse($data);
+
+    expect($result)->toBe($data);
+});
+
+it('rejects a response with missing fields', function () {
+    $data = [
+        'competences_extraites' => ['PHP'],
+        'annees_experience' => 3,
+    ];
+
+    AnalyseCvSchema::validateResponse($data);
+})->throws(AnalyseIAException::class, 'Champ manquant');
+
+it('rejects a response with invalid matching_score', function () {
+    $data = [
+        'competences_extraites' => ['PHP'],
+        'annees_experience' => 3,
+        'niveau_etudes' => 'Licence',
+        'langues' => ['Français'],
+        'matching_score' => 150,
+        'points_forts' => ['Bon développeur'],
+        'lacunes' => ['Manque d\'expérience'],
+        'competences_manquantes' => ['Docker'],
+        'recommandation' => 'attente',
+        'justification' => 'Profil correct.',
+    ];
+
+    AnalyseCvSchema::validateResponse($data);
+})->throws(AnalyseIAException::class, 'matching_score');
+
+it('rejects a response with invalid recommandation', function () {
+    $data = [
+        'competences_extraites' => ['PHP'],
+        'annees_experience' => 3,
+        'niveau_etudes' => 'Licence',
+        'langues' => ['Français'],
+        'matching_score' => 75,
+        'points_forts' => ['Bon développeur'],
+        'lacunes' => ['Manque d\'expérience'],
+        'competences_manquantes' => ['Docker'],
+        'recommandation' => 'invalide',
+        'justification' => 'Profil correct.',
+    ];
+
+    AnalyseCvSchema::validateResponse($data);
+})->throws(AnalyseIAException::class, 'recommandation');
+
+it('retries analysis via the retry route', function () {
+    Queue::fake();
+
+    $offre = Offre::factory()->create(['user_id' => $this->user->id]);
+    $candidat = Candidat::factory()->create([
+        'offre_id' => $offre->id,
+        'statut_job' => StatutJobEnum::Echec,
+    ]);
+
+    $this->post(route('offres.candidats.retry-analyse', [$offre, $candidat]));
+
+    expect($candidat->fresh()->statut_job)->toBe(StatutJobEnum::EnAttente);
+    Queue::assertPushed(AnalyseCvJob::class);
 });

@@ -31,6 +31,7 @@ Route::middleware('auth')->group(function () {
             Route::get('/create', [CandidatController::class, 'create'])->name('create');
             Route::post('/', [CandidatController::class, 'store'])->name('store');
             Route::get('/{candidat}', [CandidatController::class, 'show'])->name('show');
+            Route::post('/{candidat}/retry-analyse', [CandidatController::class, 'retryAnalyse'])->name('retry-analyse');
         });
     });
 });
