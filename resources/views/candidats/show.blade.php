@@ -106,6 +106,14 @@
                                 <dd class="mt-1 text-sm whitespace-pre-wrap">{{ $candidat->analyse->justification }}</dd>
                             </div>
                         </dl>
+
+                        <div class="mt-6 pt-4 border-t border-gray-200 dark:border-gray-600">
+                            <form method="POST" action="{{ route('conversations.store') }}">
+                                @csrf
+                                <input type="hidden" name="candidat_id" value="{{ $candidat->id }}">
+                                <x-primary-button>{{ __('Discuter avec l\'assistant') }}</x-primary-button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             @elseif ($candidat->statut_job->value === 'en_cours')
