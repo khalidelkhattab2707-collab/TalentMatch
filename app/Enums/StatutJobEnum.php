@@ -5,6 +5,7 @@ namespace App\Enums;
 enum StatutJobEnum: string
 {
     case EnAttente = 'en_attente';
-    case Accepte = 'accepte';
-    case Refuse = 'refuse';
+    case EnCours = 'en_cours';
+    case Analyse = 'analyse';
+    case Echec = 'echec';
 }

@@ -15,7 +15,7 @@ class StoreCandidatRequest extends FormRequest
     {
         return [
             'nom' => ['required', 'string', 'max:255'],
-            'cv_texte' => ['required', 'string'],
+            'cv_texte' => ['required', 'string', 'min:50'],
         ];
     }
 }
