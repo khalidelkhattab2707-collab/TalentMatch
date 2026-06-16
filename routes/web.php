@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CandidatController;
+use App\Http\Controllers\ComparerController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OffreController;
@@ -32,6 +33,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/{offre}/edit', [OffreController::class, 'edit'])->name('edit');
         Route::put('/{offre}', [OffreController::class, 'update'])->name('update');
         Route::delete('/{offre}', [OffreController::class, 'destroy'])->name('destroy');
+
+        Route::get('/{offre}/comparer', [ComparerController::class, 'compare'])->name('comparer');
 
         Route::prefix('/{offre}/candidats')->name('candidats.')->group(function () {
             Route::get('/create', [CandidatController::class, 'create'])->name('create');
