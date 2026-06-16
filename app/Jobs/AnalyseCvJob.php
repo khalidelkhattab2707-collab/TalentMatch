@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\AI\Schemas\AnalyseCvSchema;
 use App\Enums\StatutJobEnum;
+use App\Exceptions\AnalyseIAException;
 use App\Models\Analyse;
 use App\Models\Candidat;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -34,32 +35,43 @@ class AnalyseCvJob implements ShouldQueue
             ."Expérience minimum : {$offre->experience_minimum} ans.\n\n"
             ."CV du candidat :\n{$this->candidat->cv_texte}";
 
-        $response = (new AnalyseCvSchema)->prompt($prompt);
+        $responseText = (new AnalyseCvSchema)->prompt($prompt);
+
+        $decoded = json_decode((string) $responseText, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new AnalyseIAException(
+                'Réponse IA invalide : impossible de décoder le JSON ('.json_last_error_msg().')'
+            );
+        }
+
+        $validated = AnalyseCvSchema::validateResponse($decoded);
 
         Analyse::create([
             'candidat_id' => $this->candidat->id,
-            'competences_extraites' => $response['competences_extraites'],
-            'annees_experience' => $response['annees_experience'],
-            'niveau_etudes' => $response['niveau_etudes'],
-            'langues' => $response['langues'],
-            'matching_score' => $response['matching_score'],
-            'points_forts' => $response['points_forts'],
-            'lacunes' => $response['lacunes'],
-            'competences_manquantes' => $response['competences_manquantes'],
-            'recommandation' => $response['recommandation'],
-            'justification' => $response['justification'],
+            'competences_extraites' => $validated['competences_extraites'],
+            'annees_experience' => $validated['annees_experience'],
+            'niveau_etudes' => $validated['niveau_etudes'],
+            'langues' => $validated['langues'],
+            'matching_score' => $validated['matching_score'],
+            'points_forts' => $validated['points_forts'],
+            'lacunes' => $validated['lacunes'],
+            'competences_manquantes' => $validated['competences_manquantes'],
+            'recommandation' => $validated['recommandation'],
+            'justification' => $validated['justification'],
         ]);
 
         $this->candidat->update(['statut_job' => StatutJobEnum::Analyse]);
     }
 
-    public function failed(): void
+    public function failed(\Throwable $e): void
     {
         $this->candidat->update(['statut_job' => StatutJobEnum::Echec]);
 
         Log::error('AnalyseCvJob failed', [
             'candidat_id' => $this->candidat->id,
             'candidat_nom' => $this->candidat->nom,
+            'error' => $e->getMessage(),
         ]);
     }
 }

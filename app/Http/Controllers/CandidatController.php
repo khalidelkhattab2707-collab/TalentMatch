@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\StatutJobEnum;
 use App\Http\Requests\StoreCandidatRequest;
 use App\Jobs\AnalyseCvJob;
 use App\Models\Candidat;
@@ -38,5 +39,17 @@ class CandidatController extends Controller
         $candidat->load('analyse');
 
         return view('candidats.show', compact('offre', 'candidat'));
+    }
+
+    public function retryAnalyse(Offre $offre, Candidat $candidat): RedirectResponse
+    {
+        Gate::authorize('view', $offre);
+
+        $candidat->update(['statut_job' => StatutJobEnum::EnAttente]);
+
+        dispatch(new AnalyseCvJob($candidat));
+
+        return to_route('offres.candidats.show', [$offre, $candidat])
+            ->with('success', __("L'analyse a été relancée."));
     }
 }
